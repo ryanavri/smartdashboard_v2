@@ -48,8 +48,7 @@ ui <- dashboardPage(
                     subtitle = "Total Patrols",
                     icon = icon("chart-line"),
                     color = "success",
-                    width = 4,
-                    
+                    width = 4
                   ),
                   bs4ValueBox(
                     value = textOutput("total_days"),
@@ -96,16 +95,17 @@ ui <- dashboardPage(
                                  collapsible = TRUE, collapsed = FALSE,
                                  selectInput("landscape", "Landscape", choices = unique(CAM$Landscape), multiple = TRUE),
                                  selectInput("site", "Site", choices = unique(CAM$Station), multiple = TRUE),
-                                 dateRangeInput("dateRange", "Date", start = Sys.Date() - 365 * 5, end = Sys.Date()),
+                                 dateRangeInput("dateRange", "Date", start = Sys.Date() - 365 , end = Sys.Date()),
                                  selectInput("camquerytype", "Periode", choices = c("Monthly", "Yearly", "Quarterly")),
                                  actionButton("camcalculate", "Run Query")
                          )
                   ),
                   column(9,
                          fluidRow(
-                           bs4Card(title = "Chart 1", width = 12, status = "primary", solidHeader = TRUE,
+                           bs4Card(title = "Effort Chart", width = 12, status = "primary", solidHeader = TRUE,
                                    collapsible = TRUE, collapsed = FALSE,
-                                   "Placeholder for Chart 1")
+                                   plotlyOutput("effort_chart")
+                           )
                          ),
                          fluidRow(
                            bs4ValueBox(
@@ -243,6 +243,7 @@ server <- function(input, output, session) {
   })
   
   
+  
   # overview chart
   output$overview_chart <- renderPlotly({
     CRP %>%
@@ -273,6 +274,57 @@ server <- function(input, output, session) {
     dom = 't',
     searching = FALSE
   ))
+  
+  
+  # Reactive data filtering
+  filteredData <- eventReactive(input$camcalculate, {
+    CAM_data <- CRP
+    
+    if (!is.null(input$landscape) && length(input$landscape) > 0) {
+      CAM_data <- CAM_data %>% filter(Landscape %in% input$landscape)
+    }
+    
+    if (!is.null(input$site) && length(input$site) > 0) {
+      CAM_data <- CAM_data %>% filter(Station %in% input$site)
+    }
+    
+    if (!is.null(input$dateRange) && length(input$dateRange) > 0) {
+      CAM_data <- CAM_data %>%
+        filter(as.Date(Patrol_Sta, format = "%b %d, %Y") >= input$dateRange[1] &
+                 as.Date(Patrol_End, format = "%b %d, %Y") <= input$dateRange[2])
+    }
+    
+    CAM_data %>%
+      mutate(
+        Patrol_Sta = as.Date(Patrol_Sta, format = "%b %d, %Y"),
+        Distance_km = as.numeric(sub("[m]", "", Jarak)) / 1000,
+        Period = case_when(
+          input$camquerytype == "Monthly" ~ format(Patrol_Sta, "%Y-%m"),
+          input$camquerytype == "Quarterly" ~ paste0(format(Patrol_Sta, "%Y"), "-Q", quarter(Patrol_Sta)),
+          TRUE ~ as.character(year(Patrol_Sta))
+        )
+      )
+  })
+  
+  # Patrol effort chart
+  output$effort_chart <- renderPlotly({
+    CAM_data <- filteredData()
+    
+    effort_plot <- CAM_data %>%
+      group_by(Period) %>%
+      summarise(Total_Distance = sum(Distance_km, na.rm = TRUE)) %>%
+      ggplot(aes(x = Period, y = Total_Distance, group = 1)) +
+      geom_smooth(method = "loess", se = TRUE, color = "green", size = 0.8) +
+      labs(
+        title = paste("Patrol Effort Over Time (", input$camquerytype, ")", sep = ""),
+        x = input$camquerytype,
+        y = "Total Distance (km)"
+      ) +
+      theme_bw() +
+      theme(axis.text.x = element_text(angle = 45, hjust = 1))
+    
+    ggplotly(effort_plot)
+  })
   
 }
 
