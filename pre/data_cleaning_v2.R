@@ -17,26 +17,35 @@ clean_ringkasan_patroli <- function(file_path, landscape) {
       Jarak = st_length(.)
     ) %>%
     select(-Patrol_L_1, -Patrol_L_2, -Armed, -Patrol_Leg) %>%
-    as.data.frame()
+    as.data.frame() %>%
+    select(-geometry)
 }
 
 # Clean and combine datasets
 CRP <- clean_ringkasan_patroli("source/KSL/patrol_tracks.shp", "Kerinci-Seblat")
-# NRP <- clean_ringkasan_patroli("source/KSL/Ringkasan_Jalur_Patroli_000251.shp", "Kerinci-Seblat")
-# CRP <- bind_rows(CRP, NRP)  # Combine old and new data
+NRP <- clean_ringkasan_patroli("source/Riau/Jalur_kegiatan_000038.shp", "Riau")
+CRP <- bind_rows(CRP, NRP)  # Combine old and new data
 
 ## Aktivitas Manusia ----
-# Load and clean Aktivitas Manusia CSV
-CAM <- read.csv("source/KSL/Aktivitas_Manusia_000053.csv") %>%
-  mutate(
-    Landscape = "Kerinci-Seblat",
-    Tanggal = anytime(Waypoint.Date)
-  ) %>%
-  rename(
-    Patrol_ID = Patrol.ID,
-    Kategori_temuan = Observation.Category.1
-  ) %>%
-  select(-Observation.Category.0)
+# Function to clean Aktivitas Manusia CSVs
+clean_aktivitas_manusia <- function(file_path, landscape) {
+  read.csv(file_path) %>%
+    mutate(
+      Landscape = landscape,
+      Tanggal = anytime(Waypoint.Date)
+    ) %>%
+    rename(
+      Patrol_ID = Patrol.ID,
+      Kategori_temuan = Observation.Category.1
+    ) %>%
+    select(-`Observation.Category.0`, -`Patrol.Leg.ID`, -`Waypoint.ID`)
+  
+}
+
+# Clean and combine datasets
+CAM <- clean_aktivitas_manusia("source/KSL/Aktivitas_Manusia_000053.csv", "Kerinci-Seblat")
+NAM <- clean_aktivitas_manusia("source/Riau/Aktivitas_manusia__pelanggaran__000053.csv", "Riau")
+CAM <- bind_rows(CAM, NAM)  # Combine old and new data
 
 ## Perjumpaan Satwa ----
 # Function to clean Perjumpaan Satwa CSVs
@@ -64,24 +73,10 @@ clean_satwa <- function(file_path, landscape, site = NA) {
 
 # Clean and combine datasets
 CSL <- clean_satwa("source/KSL/Tabel_dan_sebaran_satwa_000001.csv", "Kerinci-Seblat")
-# NSL <- clean_satwa("input/Satwa_Liar_000248.csv", "Kerinci-Seblat", "Taman Nasional Kerinci Seblat")
-# CSL <- bind_rows(CSL, NSL)  # Combine old and new data
+NSL <- clean_satwa("source/Riau/Tabel_dan_sebaran_satwa_000001.csv", "Riau")
+CSL <- bind_rows(CSL, NSL)  # Combine old and new data
 
-## Perjumpaan Tumbuhan ----
-# Load and clean Perjumpaan Tumbuhan CSV
-CTH <- read.csv("source/KSL/Tumbuhan_000089.csv") %>%
-  mutate(
-    Landscape = "Kerinci-Seblat",
-    Tanggal = anytime(Waypoint.Date)
-  ) %>%
-  rename(
-    Patrol_ID = Patrol.ID,
-    Kategori_temuan = Tipe.temuan
-  ) %>%
-  select(-Observation.Category.0) %>%
-  separate(Jenis.tumbuhan, into = c("Jenis.tumbuhan", "Scientific.Name"), sep = " - ") %>%
-  drop_na(Scientific.Name)
-
+# Data availability
 DAVAIL <- CRP %>%
   mutate(
     Patrol_Sta = lubridate::mdy(Patrol_Sta),
@@ -113,4 +108,4 @@ DAVAIL <- CRP %>%
 
 # Export all ----
 # Save the cleaned datasets to an RData file
-save(CAM, CRP, CSL, CTH, DAVAIL, file = "source/smart_patrol_data.RData")
+save(CAM, CRP, CSL, DAVAIL, file = "source/smart_patrol_data.RData")

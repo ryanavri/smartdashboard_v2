@@ -109,34 +109,25 @@ ui <- dashboardPage(
                          ),
                          fluidRow(
                            bs4ValueBox(
-                             value = "120 Days",
+                             value = textOutput("patrol_duration"),
                              subtitle = "Patrol Duration",
                              icon = icon("calendar"),
                              color = "success",
-                             width = 6
+                             width = 4
                            ),
                            bs4ValueBox(
-                             value = "50 km",
+                             value = textOutput("patrol_length"),
                              subtitle = "Patrol Length",
                              icon = icon("route"),
                              color = "info",
-                             width = 6
-                           )
-                         ),
-                         fluidRow(
+                             width = 4
+                           ),
                            bs4ValueBox(
-                             value = "10 Patrols",
+                             value = textOutput("patrol_frequency"),
                              subtitle = "Patrol Frequency",
                              icon = icon("chart-line"),
                              color = "warning",
-                             width = 6
-                           ),
-                           bs4ValueBox(
-                             value = "45 People",
-                             subtitle = "People Involved",
-                             icon = icon("user"),
-                             color = "primary",
-                             width = 6
+                             width = 4
                            )
                          )
                   )
@@ -174,7 +165,8 @@ ui <- dashboardPage(
 # Define the server----
 server <- function(input, output, session) {
   
-  # Function to calculate percentage change
+  # Overview Server----
+  ## Function to calculate percentage change----
   percentage_change <- function(latest, previous) {
     if (is.na(previous) || previous == 0) {
       return("N/A")
@@ -187,13 +179,13 @@ server <- function(input, output, session) {
     }
   }
   
-  # Calculate overview metrics
+  ## Calculate overview metrics----
   overview_metrics <- reactive({
     yearly_metrics <- CRP %>%
       mutate(
         Year = year(lubridate::mdy(Patrol_Sta)),
         Patrol_Days = as.numeric(lubridate::mdy(Patrol_End) - lubridate::mdy(Patrol_Sta)),
-        Distance_km = as.numeric(sub("[m]", "", Jarak)) / 1000
+        Distance_km = as.numeric(Jarak) / 1000
       ) %>%
       group_by(Year) %>%
       summarise(
@@ -218,7 +210,7 @@ server <- function(input, output, session) {
     )
   })
   
-  # Update value boxes
+  ## Update value boxes----
   output$total_patrols <- renderText({
     paste(
       format(overview_metrics()$Total_Patrols, big.mark = ","),
@@ -242,32 +234,37 @@ server <- function(input, output, session) {
     )
   })
   
-  
-  
-  # overview chart
+  ## Overview chart----
   output$overview_chart <- renderPlotly({
-    CRP %>%
-      mutate(Year = year(lubridate::mdy(Patrol_Sta)), Distance_km = as.numeric(sub("[m]", "", Jarak)) / 1000) %>%
-      group_by(Year) %>%
+    ctes <- CRP %>%
+      mutate(
+        Year = year(lubridate::mdy(Patrol_Sta)),
+        Distance_km = as.numeric(Jarak) / 1000
+      ) %>%
+      group_by(Year, Landscape) %>%
       summarise(KM_Covered = sum(Distance_km, na.rm = TRUE)) %>%
-      plot_ly(x = ~Year, y = ~KM_Covered, type = 'scatter', mode = 'lines+markers',
-              line = list(color = 'blue'),
-              marker = list(size = 8)) %>%
-      layout(
-        title = "Annual Patrol Distance Covered",
-        xaxis = list(title = "Year"),
-        yaxis = list(title = "Distance Covered (km)")
-      )
+      ggplot(aes(x = Year, y = KM_Covered, color = Landscape, group = Landscape)) +
+      geom_line(size = 1) +
+      geom_point(size = 2) +
+      labs(
+        title = "Annual Patrol Distance Covered by Landscape",
+        x = "Year",
+        y = "Distance Covered (km)",
+        color = "Landscape"
+      ) +
+      theme_minimal() 
+    
+    ggplotly(ctes)
   })
   
-  # Data availability summary
+  ## Data availability summary----
   output$data_availability <- DT::renderDT({
     DAVAIL %>%
       mutate(
         `Total Patrols` = format(`Total Patrols`, big.mark = ","),
         `Start Date` = as.character(`Start Date`),
         `End Date` = as.character(`End Date`),
-        `Total Patrol Days` = format(`Total Patrol Days`, big.mark = ",")
+        `Total Patrol Days` = format(`Patrol Days`, big.mark = ",")
       )
   }, options = list(
     autoWidth = TRUE,
@@ -275,9 +272,10 @@ server <- function(input, output, session) {
     searching = FALSE
   ))
   
-  
-  # Reactive data filtering
+  # Patrol Effort----
+  ## Reactive data filtering----
   filteredData <- eventReactive(input$camcalculate, {
+    
     CAM_data <- CRP
     
     if (!is.null(input$landscape) && length(input$landscape) > 0) {
@@ -297,7 +295,7 @@ server <- function(input, output, session) {
     CAM_data %>%
       mutate(
         Patrol_Sta = as.Date(Patrol_Sta, format = "%b %d, %Y"),
-        Distance_km = as.numeric(sub("[m]", "", Jarak)) / 1000,
+        Distance_km = as.numeric(Jarak) / 1000,
         Period = case_when(
           input$camquerytype == "Monthly" ~ format(Patrol_Sta, "%Y-%m"),
           input$camquerytype == "Quarterly" ~ paste0(format(Patrol_Sta, "%Y"), "-Q", quarter(Patrol_Sta)),
@@ -306,8 +304,9 @@ server <- function(input, output, session) {
       )
   })
   
-  # Patrol effort chart
+  ## Patrol effort chart----
   output$effort_chart <- renderPlotly({
+    
     CAM_data <- filteredData()
     
     effort_plot <- CAM_data %>%
@@ -325,6 +324,24 @@ server <- function(input, output, session) {
     
     ggplotly(effort_plot)
   })
+  
+  ## Patrol effort value boxes----
+  output$patrol_duration <- renderText({
+    Pd_data <- filteredData()
+    paste(format(sum(as.numeric(as.Date(Pd_data$Patrol_End, "%b %d, %Y") - as.Date(Pd_data$Patrol_Sta, "%b %d, %Y")), na.rm = TRUE), big.mark = ","), "Days")
+  })
+  
+  output$patrol_length <- renderText({
+    Pl_data <- filteredData()
+    paste(format(round(sum(as.numeric(Pl_data$Jarak) / 1000, na.rm = TRUE), 2), big.mark = ","), "km")
+  })
+  
+  output$patrol_frequency <- renderText({
+    Pf_data <- filteredData()
+    format(n_distinct(Pf_data$Patrol_ID), big.mark = ",")
+  })
+  
+  
   
 }
 
