@@ -38,8 +38,9 @@ ui <- dashboardPage(
         ## Instructions tab----
         tabItem(tabName = "instructions",
                 h2("Instructions"),
-                p("This dashboard provides an overview of SMART patrol data, including patrol efforts, findings, and maps. Use the navigation menu to explore different sections of the dashboard."),
-                tags$iframe(src="https://www.youtube.com/embed/vkfZ-lZ41w0", width="100%", height="650px", frameborder="0", allowfullscreen=T)
+                p("This dashboard provides an overview of SMART patrol data, including patrol efforts, findings, and maps. Use the navigation menu to explore different sections of the dashboard.
+                  The video below supposed to be overview or instruction how to use the dashboard. will added later"),
+                tags$iframe(src="https://www.youtube.com/embed/5_2gbNo92kc", width="100%", height="650px", frameborder="0", allowfullscreen=T)
         ),
         
         ## Overview tab----
@@ -141,7 +142,7 @@ ui <- dashboardPage(
         ## Findings - Human Activities tab----
         tabItem(tabName = "human_activities",
                 h2("Human Activities"),
-                p("Details about human-related findings during patrols."),
+                p("Details about human activities findings during patrols."),
                 fluidRow(
                   column(2,
                          bs4Card(title = "Filters", width = 12, status = "primary", solidHeader = TRUE,
@@ -179,7 +180,7 @@ ui <- dashboardPage(
         
         ## Findings - Wildlife tab----
         tabItem(tabName = "wildlife",
-                h2("wildlife findings"),
+                h2("Wildlife Findings"),
                 p("Details about wildlife-related findings during patrols."),
                 fluidRow(
                   column(2,
@@ -189,14 +190,70 @@ ui <- dashboardPage(
                                  selectInput("site_wildlife", "Site", choices = unique(CSL$Station), multiple = TRUE),
                                  selectInput("Jenis.satwa", "Species", choices = unique(CSL$Jenis.satwa), multiple = TRUE),
                                  dateRangeInput("dateRange_wildlife", "Date", start = Sys.Date() - 365 , end = Sys.Date()),
-                                 actionButton("wildlife_calculate", "Run Query")
+                                 actionButton("wildlife_calculate", "Run Query"),
+                                 tags$hr(),
+                                 "All data presented here only show species identified at the species level. The actual number of species is higher than what is shown."
                          )
                   ),
                   column(10,
                          fluidRow(
-                           bs4Card(title = "Donut Chart", width = 12, status = "primary", solidHeader = TRUE,
-                                   plotlyOutput("wildlife_donut_chart")
-                           )),
+                           bs4ValueBox(
+                             value = HTML("<span style='font-size: 2em; font-weight: bold;'>" %>% 
+                                            paste0(textOutput("total_ordo"), "</span>")),
+                             subtitle = "Ordo",
+                             icon = icon("paw"),
+                             color = "success",
+                             width = 4
+                           ),
+                           bs4ValueBox(
+                             value = HTML("<span style='font-size: 2em; font-weight: bold;'>" %>% 
+                                            paste0(textOutput("total_family"), "</span>")),
+                             subtitle = "Family",
+                             icon = icon("paw"),
+                             color = "success",
+                             width = 4
+                           ),
+                           bs4ValueBox(
+                             value = HTML("<span style='font-size: 2em; font-weight: bold;'>" %>% 
+                                            paste0(textOutput("total_species"), "</span>")),
+                             subtitle = "Species",
+                             icon = icon("paw"),
+                             color = "success",
+                             width = 4
+                           ),
+                           bs4ValueBox(
+                             value = HTML("<span style='font-size: 2em; font-weight: bold;'>" %>% 
+                                            paste0(textOutput("total_redlist"), "</span>")),
+                             subtitle = "IUCN redlist",
+                             icon = icon("paw"),
+                             color = "danger",
+                             width = 4
+                           ),
+                           bs4ValueBox(
+                             value = HTML("<span style='font-size: 2em; font-weight: bold;'>" %>% 
+                                            paste0(textOutput("total_cites"), "</span>")),
+                             subtitle = "CITES",
+                             icon = icon("paw"),
+                             color = "danger",
+                             width = 4
+                           ),
+                           bs4ValueBox(
+                             value = HTML("<span style='font-size: 2em; font-weight: bold;'>" %>% 
+                                            paste0(textOutput("total_pp"), "</span>")),
+                             subtitle = "PP106",
+                             icon = icon("paw"),
+                             color = "danger",
+                             width = 4
+                           )
+                         ),
+                         tags$hr(),
+                         fluidRow(
+                           solidHeader = TRUE,
+                           bs4Card(title = "Donut Chart", width = 6, status = "primary", solidHeader = TRUE,
+                                   plotlyOutput("iucn_pie")),
+                           bs4Card(title = "Donut Chart", width = 6, status = "primary", solidHeader = TRUE,
+                                   plotlyOutput("cites_pie")),
+                         ),
                          fluidRow(
                            bs4Card(title = "CPUE Chart", width = 12, status = "warning", solidHeader = TRUE,
                                    plotOutput("cpue_wildlife_chart", height = "650px")
@@ -516,13 +573,13 @@ server <- function(input, output, session) {
     m@map
   })
   
-  # Human Activities Table
+  ## Human Activities Table----
   output$human_table <- DT::renderDT({
     filteredHumanData() %>%
       select(Patrol_ID, Station, Team, Tanggal, Kategori_temuan, Tindakan, Tipe.temuan)
   })
   
-  # Human Activities Table Download
+  ## Human Activities Table Download----
   output$download_human_data <- downloadHandler(
     filename = function() {
       paste("human_activities_", Sys.Date(), ".csv", sep = "")
@@ -560,6 +617,197 @@ server <- function(input, output, session) {
                  as.Date(Patrol.End.Date , format = "%b %d, %Y") <= input$dateRange_wildlife[2])
     }
     CSL_data
+  })
+  
+  ## Box Value Output----
+  output$total_ordo <- renderText({
+    
+    CSL_dat <- filteredwildlifeData()
+    value <- CSL_dat %>%
+      inner_join(taxon, by = "Scientific.Name") %>%
+      distinct(Order) %>%
+      nrow()
+    
+    paste(format(value, big.mark = ",")
+    )
+  })
+  
+  output$total_family <- renderText({
+    
+    CSL_dat <- filteredwildlifeData()
+    value <- CSL_dat %>%
+      inner_join(taxon, by = "Scientific.Name") %>%
+      distinct(Family) %>%
+      nrow()
+    
+    paste(format(value, big.mark = ",")
+    )
+  })
+  
+  output$total_species <- renderText({
+    
+    CSL_dat <- filteredwildlifeData()
+    value <- CSL_dat %>%
+      inner_join(taxon, by = "Scientific.Name") %>%
+      distinct(Scientific.Name) %>%
+      nrow()
+    
+    paste(format(value, big.mark = ",")
+    )
+  })
+  
+  output$total_redlist <- renderText({
+    
+    CSL_dat <- filteredwildlifeData()
+    
+    value <- CSL_dat %>%
+      inner_join(taxon, by = "Scientific.Name") %>%
+      group_by(Class, Scientific.Name, Status ) %>%
+      summarise(count = n()) %>%
+      group_by(Status ) %>%
+      mutate(iu_count = 1) %>%
+      group_by(Status ) %>%
+      filter(Status  %in% c("CR", "VU", "EN")) %>%
+      nrow () 
+    
+    paste(format(value, big.mark = ",")
+    )
+  })
+  
+  output$total_cites <- renderText({
+    
+    CSL_dat <- filteredwildlifeData()
+    
+    value <- CSL_dat %>%
+      inner_join(taxon, by = "Scientific.Name") %>%
+      group_by(Class, Scientific.Name, Appendix) %>%
+      summarise(count = n()) %>%
+      group_by(Appendix) %>%
+      mutate(ci_count = 1) %>%
+      group_by(Appendix) %>%
+      filter(Appendix %in% c("I", "II")) %>%
+      nrow () 
+    
+    paste(format(value, big.mark = ",")
+    )
+  })
+  
+  output$total_pp <- renderText({
+    
+    CSL_dat <- filteredwildlifeData()
+    
+    value <- CSL_dat %>%
+      inner_join(taxon, by = "Scientific.Name") %>%
+      group_by(Class, Scientific.Name, Protected ) %>%
+      summarise(count = n()) %>%
+      group_by(Protected ) %>%
+      mutate(Protected_count = 1) %>%
+      group_by(Protected ) %>%
+      filter(Protected  == "Y") %>%
+      nrow () 
+    
+    paste(format(value, big.mark = ",")
+    )
+  })
+  
+  output$iucn_pie <- renderPlotly({
+    
+    CSL_dat <- filteredwildlifeData()
+    filtered_iucn_pie <- CSL_dat %>% inner_join(taxon, by="Scientific.Name") %>%
+      group_by(Scientific.Name, Status ) %>%
+      summarise(count = n()) %>%
+      filter(Status  %in% c("CR", "EN", "VU")) %>%
+      group_by(Status ) %>%
+      mutate(iu_count = 1) %>%
+      group_by(Status ) %>%
+      summarise(total_iu_count = sum(iu_count, na.rm = TRUE))
+    
+    plot_ly(filtered_iucn_pie, labels = ~Status , values = ~total_iu_count, type = 'pie', 
+            text= ~total_iu_count,
+            textinfo='label+text',
+            hole=0.6) %>%
+      layout(
+        title = 'IUCN Red List Proportion',
+        xaxis = list(showgrid = FALSE, zeroline = FALSE, showticklabels = FALSE),
+        yaxis = list(showgrid = FALSE, zeroline = FALSE, showticklabels = FALSE)
+      ) 
+    
+  })
+  
+  output$cites_pie <- renderPlotly({
+    
+    CSL_dat <- filteredwildlifeData()
+    filtered_cites_pie <- CSL_dat %>% inner_join(taxon, by="Scientific.Name") %>%
+      group_by(Scientific.Name, Appendix) %>%
+      summarise(count = n()) %>%
+      filter(Appendix %in% c("I", "II")) %>%
+      group_by(Appendix) %>%
+      mutate(ci_count = 1) %>%
+      group_by(Appendix) %>%
+      summarise(total_ci_count = sum(ci_count, na.rm = TRUE))
+    
+    plot_ly(filtered_cites_pie, labels = ~Appendix, values = ~total_ci_count, type = 'pie', 
+            text= ~total_ci_count,
+            textinfo='label+text',
+            hole=0.6) %>%
+      layout(
+        title = 'CITES Proportion',
+        xaxis = list(showgrid = FALSE, zeroline = FALSE, showticklabels = FALSE),
+        yaxis = list(showgrid = FALSE, zeroline = FALSE, showticklabels = FALSE)
+      ) 
+    
+  })
+  
+  ## cpue wildlife chart----
+  output$cpue_wildlife_chart <- renderPlot({
+    
+    CSLdat <- filteredwildlifeData()
+    
+    CSLdata <- CSLdat %>%
+      group_by(Scientific.Name, Patrol_ID) %>%
+      summarise(n = n(), .groups = "drop") %>%
+      dplyr::inner_join(datEff %>% select(Patrol_ID, Patrol_Sta, effort), by = "Patrol_ID") %>%
+      mutate(
+        dens = n / (as.numeric(effort) / 1000),  # Convert effort to numeric
+        patrol.date = as.Date(Patrol_Sta, format = "%b %d, %Y")
+      ) %>%
+      group_by(Scientific.Name) %>%
+      summarise(
+        mean_dens = mean(dens, na.rm = TRUE),
+        se_dens = sd(dens, na.rm = TRUE) / sqrt(n()),
+        .groups = "drop"
+      ) %>%
+      arrange(desc(mean_dens)) %>%
+      slice_head(n = 10)  # Select top 10 species by density
+    
+    ggplot(CSLdata, aes(x = reorder(Scientific.Name, mean_dens), y = mean_dens)) +
+      geom_bar(stat = "identity", fill = "blue", alpha = 0.7) +
+      geom_errorbar(aes(ymin = mean_dens - se_dens, ymax = mean_dens + se_dens), width = 0.2, color = "black") +
+      geom_text(aes(label = round(mean_dens, 2)), hjust = -0.1, vjust = 2, size = 4) +  # Add mean density as text
+      coord_flip() +
+      labs(
+        title = "Top 10 Species by CPUE (with SE)",
+        x = "Scientific Name",
+        y = "CPUE (Sighting per km)"
+      ) +
+      theme_bw() +
+      theme(
+        axis.text.x = element_text(angle = 45, hjust = 1),
+        axis.text.y = element_text(size = 10, face = "italic"),  # Make y-axis (species names) italic
+        plot.title = element_text(size = 16, face = "bold")
+      )
+    
+  })
+  
+  ## Wildlife Table----
+  output$wildlife_table <- DT::renderDT({
+    
+    filteredwildlifeData() %>%
+      distinct(Scientific.Name, .keep_all = TRUE) %>%  # Keep only the first row for each Scientific.Name
+      inner_join(taxon, by = "Scientific.Name") %>%
+      select(Class, Order, Family, Scientific.Name, Status, Trend, Appendix, Protected, Endemic, Migratory) %>%
+      arrange(Class, Order, Family, Scientific.Name) %>%
+      distinct(Scientific.Name, .keep_all = TRUE) 
   })
   
   ## Map----  
