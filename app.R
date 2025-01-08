@@ -5,6 +5,10 @@ library(dplyr)
 library(lubridate)
 library(kableExtra)
 library(plotly)
+library(leaflet)
+library(mapview)
+library(sf)
+library(ggpmisc)
 
 # Source of dataset
 load("source/smart_patrol_data.RData")
@@ -35,13 +39,13 @@ ui <- dashboardPage(
         tabItem(tabName = "instructions",
                 h2("Instructions"),
                 p("This dashboard provides an overview of SMART patrol data, including patrol efforts, findings, and maps. Use the navigation menu to explore different sections of the dashboard."),
-                tags$iframe(src="https://www.youtube.com/embed/vkfZ-lZ41w0", width="100%", height="400px", frameborder="0", allowfullscreen=T)
+                tags$iframe(src="https://www.youtube.com/embed/vkfZ-lZ41w0", width="100%", height="650px", frameborder="0", allowfullscreen=T)
         ),
         
         ## Overview tab----
         tabItem(tabName = "overview",
                 h2("Overview"),
-                p("Summary of SMART patrol data."),
+                p("Summary of SMART patrol data across Indonesia Programmes."),
                 fluidRow(
                   bs4ValueBox(
                     value = textOutput("total_patrols"),
@@ -96,7 +100,7 @@ ui <- dashboardPage(
                                  selectInput("landscape", "Landscape", choices = unique(CAM$Landscape), multiple = TRUE),
                                  selectInput("site", "Site", choices = unique(CAM$Station), multiple = TRUE),
                                  dateRangeInput("dateRange", "Date", start = Sys.Date() - 365 , end = Sys.Date()),
-                                 selectInput("camquerytype", "Periode", choices = c("Monthly", "Yearly", "Quarterly")),
+                                 selectInput("camquerytype", "Period", choices = c("Monthly", "Yearly", "Quarterly")),
                                  actionButton("camcalculate", "Run Query")
                          )
                   ),
@@ -139,22 +143,75 @@ ui <- dashboardPage(
                 h2("Human Activities"),
                 p("Details about human-related findings during patrols."),
                 fluidRow(
-                  bs4Card(title = "Human Activities by Category", width = 6, status = "primary", solidHeader = TRUE,
-                          "Placeholder for human activities charts"),
-                  bs4Card(title = "Human Activities Over Time", width = 6, status = "warning", solidHeader = TRUE,
-                          "Placeholder for human activities trends")
+                  column(2,
+                         bs4Card(title = "Filters", width = 12, status = "primary", solidHeader = TRUE,
+                                 collapsible = TRUE, collapsed = FALSE,
+                                 selectInput("landscape_human", "Landscape", choices = unique(CAM$Landscape), multiple = TRUE),
+                                 selectInput("site_human", "Site", choices = unique(CAM$Station), multiple = TRUE),
+                                 selectInput("kategori_temuan", "Category", choices = unique(CAM$Kategori_temuan), multiple = TRUE),
+                                 dateRangeInput("dateRange_human", "Date", start = Sys.Date() - 365 , end = Sys.Date()),
+                                 actionButton("human_calculate", "Run Query")
+                         )
+                  ),
+                  column(10,
+                         fluidRow(
+                           bs4Card(title = "Donut Chart", width = 12, status = "primary", solidHeader = TRUE,
+                                   plotlyOutput("human_donut_chart")
+                           )),
+                         fluidRow(
+                           bs4Card(title = "CPUE Chart", width = 12, status = "warning", solidHeader = TRUE,
+                                   plotOutput("cpue_human_chart", height = "650px")
+                           )),
+                         fluidRow(
+                           bs4Card(title = "Map", width = 12, status = "info", solidHeader = TRUE,
+                                   leafletOutput("cam_map", height = "650px")
+                           )),
+                         fluidRow(
+                           bs4Card(title = "Downloadable Table", width = 12, status = "warning", solidHeader = TRUE,
+                                   DT::DTOutput("human_table"),
+                                   downloadButton("download_human_data", "Download Table")
+                           )
+                         )
+                  )
                 )
         ),
         
+        
         ## Findings - Wildlife tab----
         tabItem(tabName = "wildlife",
-                h2("Wildlife"),
+                h2("wildlife findings"),
                 p("Details about wildlife-related findings during patrols."),
                 fluidRow(
-                  bs4Card(title = "Wildlife by Category", width = 6, status = "primary", solidHeader = TRUE,
-                          "Placeholder for wildlife charts"),
-                  bs4Card(title = "Wildlife Over Time", width = 6, status = "warning", solidHeader = TRUE,
-                          "Placeholder for wildlife trends")
+                  column(2,
+                         bs4Card(title = "Filters", width = 12, status = "primary", solidHeader = TRUE,
+                                 collapsible = TRUE, collapsed = FALSE,
+                                 selectInput("landscape_wildlife", "Landscape", choices = unique(CSL$Landscape), multiple = TRUE),
+                                 selectInput("site_wildlife", "Site", choices = unique(CSL$Station), multiple = TRUE),
+                                 selectInput("Jenis.satwa", "Species", choices = unique(CSL$Jenis.satwa), multiple = TRUE),
+                                 dateRangeInput("dateRange_wildlife", "Date", start = Sys.Date() - 365 , end = Sys.Date()),
+                                 actionButton("wildlife_calculate", "Run Query")
+                         )
+                  ),
+                  column(10,
+                         fluidRow(
+                           bs4Card(title = "Donut Chart", width = 12, status = "primary", solidHeader = TRUE,
+                                   plotlyOutput("wildlife_donut_chart")
+                           )),
+                         fluidRow(
+                           bs4Card(title = "CPUE Chart", width = 12, status = "warning", solidHeader = TRUE,
+                                   plotOutput("cpue_wildlife_chart", height = "650px")
+                           )),
+                         fluidRow(
+                           bs4Card(title = "Map", width = 12, status = "info", solidHeader = TRUE,
+                                   leafletOutput("CSL_map", height = "650px")
+                           )),
+                         fluidRow(
+                           bs4Card(title = "Downloadable Table", width = 12, status = "warning", solidHeader = TRUE,
+                                   DT::DTOutput("wildlife_table"),
+                                   downloadButton("download_wildlife_data", "Download Table")
+                           )
+                         )
+                  )
                 )
         )
       )
@@ -247,25 +304,28 @@ server <- function(input, output, session) {
       geom_line(size = 1) +
       geom_point(size = 2) +
       labs(
-        title = "Annual Patrol Distance Covered by Landscape",
+        title = "Annual Patrol Distance Covered by Programme Site",
         x = "Year",
         y = "Distance Covered (km)",
-        color = "Landscape"
+        color = "Programme Site"
       ) +
-      theme_minimal() 
+      theme_bw()
     
-    ggplotly(ctes)
+    ggplotly(ctes, tooltip = c("x", "y", "color"))
   })
+  
   
   ## Data availability summary----
   output$data_availability <- DT::renderDT({
     DAVAIL %>%
       mutate(
         `Total Patrols` = format(`Total Patrols`, big.mark = ","),
-        `Start Date` = as.character(`Start Date`),
-        `End Date` = as.character(`End Date`),
+        `First Data` = as.character(`Start Date`),
+        `Last Data` = as.character(`End Date`),
         `Total Patrol Days` = format(`Patrol Days`, big.mark = ",")
-      )
+      ) %>%
+      select(Landscape, `Total Patrols`,`First Data`,
+             `Last Data`,`Total Patrol Days`, PIC, Link)
   }, options = list(
     autoWidth = TRUE,
     dom = 't',
@@ -276,23 +336,23 @@ server <- function(input, output, session) {
   ## Reactive data filtering----
   filteredData <- eventReactive(input$camcalculate, {
     
-    CAM_data <- CRP
+    CRP_data <- CRP
     
     if (!is.null(input$landscape) && length(input$landscape) > 0) {
-      CAM_data <- CAM_data %>% filter(Landscape %in% input$landscape)
+      CRP_data <- CRP_data %>% filter(Landscape %in% input$landscape)
     }
     
     if (!is.null(input$site) && length(input$site) > 0) {
-      CAM_data <- CAM_data %>% filter(Station %in% input$site)
+      CRP_data <- CRP_data %>% filter(Station %in% input$site)
     }
     
     if (!is.null(input$dateRange) && length(input$dateRange) > 0) {
-      CAM_data <- CAM_data %>%
+      CRP_data <- CRP_data %>%
         filter(as.Date(Patrol_Sta, format = "%b %d, %Y") >= input$dateRange[1] &
                  as.Date(Patrol_End, format = "%b %d, %Y") <= input$dateRange[2])
     }
     
-    CAM_data %>%
+    CRP_data %>%
       mutate(
         Patrol_Sta = as.Date(Patrol_Sta, format = "%b %d, %Y"),
         Distance_km = as.numeric(Jarak) / 1000,
@@ -307,9 +367,9 @@ server <- function(input, output, session) {
   ## Patrol effort chart----
   output$effort_chart <- renderPlotly({
     
-    CAM_data <- filteredData()
+    CRP_data <- filteredData()
     
-    effort_plot <- CAM_data %>%
+    effort_plot <- CRP_data %>%
       group_by(Period) %>%
       summarise(Total_Distance = sum(Distance_km, na.rm = TRUE)) %>%
       ggplot(aes(x = Period, y = Total_Distance, group = 1)) +
@@ -341,7 +401,182 @@ server <- function(input, output, session) {
     format(n_distinct(Pf_data$Patrol_ID), big.mark = ",")
   })
   
+  # Human activity----
+  ##  Human Activities Reactive Data Filtering----
+  filteredHumanData <- eventReactive(input$human_calculate, {
+    CAM_data <- CAM
+    
+    # Filter by Landscape
+    if (!is.null(input$landscape_human) && length(input$landscape_human) > 0) {
+      CAM_data <- CAM_data %>% filter(Landscape %in% input$landscape_human)
+      updateSelectInput(session, "site_human", choices = unique(CAM_data$Station))
+    }
+    
+    # Filter by Site
+    if (!is.null(input$site_human) && length(input$site_human) > 0) {
+      CAM_data <- CAM_data %>% filter(Station %in% input$site_human)
+    }
+    
+    # Filter by Kategori Temuan
+    if (!is.null(input$kategori_temuan) && length(input$kategori_temuan) > 0) {
+      CAM_data <- CAM_data %>% filter(Kategori_temuan %in% input$kategori_temuan)
+    }
+    
+    # Filter by Date Range
+    if (!is.null(input$dateRange_human) && length(input$dateRange_human) > 0) {
+      CAM_data <- CAM_data %>%
+        filter(as.Date(Patrol.Start.Date, format = "%b %d, %Y") >= input$dateRange_human[1] &
+                 as.Date(Patrol.End.Date , format = "%b %d, %Y") <= input$dateRange_human[2])
+    }
+    
+    CAM_data
+  })
   
+  ## Human Activities Donut Chart----
+  output$human_donut_chart <- renderPlotly({
+    CAM_data <- filteredHumanData()
+    
+    donut_data <- CAM_data %>%
+      count(Kategori_temuan) %>%
+      mutate(percentage = n / sum(n) * 100)
+    
+    plot_ly(
+      donut_data,
+      labels = ~Kategori_temuan,
+      values = ~percentage,
+      type = 'pie',
+      hole = 0.5,
+      hoverinfo = 'label+percent+value'
+    ) %>%
+      layout(
+        title = "Human Activities Distribution",
+        showlegend = TRUE
+      )
+  })
+  
+  ## cpue human chart----
+  output$cpue_human_chart <- renderPlot({
+    datCPUE <- filteredHumanData()
+    eff <- datEff %>% as.data.frame()
+    
+    # Process data
+    CPUE <- datCPUE %>%
+      group_by(Patrol_ID) %>%
+      summarise(n = n()) %>%
+      dplyr::inner_join(eff %>% select(Patrol_ID, Patrol_Sta, effort), by = "Patrol_ID") %>%
+      mutate(
+        dens = n / (as.numeric(effort) / 1000),  # Convert effort to numeric
+        patrol.date = as.Date(Patrol_Sta, format = "%b %d, %Y")
+      ) 
+    
+    # Generate the plot
+    ggplot(CPUE, aes(x = patrol.date, y = dens)) +
+      geom_point(color = "black", alpha = 0.5, size = 1) +
+      geom_smooth(method = "loess", color = "blue", fill = "lightblue", size = 1.2) +
+      geom_smooth(method = "lm", color = "red", se = FALSE, linetype = "dashed", size = 1.2) +
+      scale_y_log10(labels = scales::comma) +
+      theme_bw(base_size = 15) +
+      theme(
+        panel.grid.major = element_line(color = "grey80"),
+        panel.grid.minor = element_blank(),
+        plot.title = element_text(size = 18, face = "bold", hjust = 0.5),
+        axis.title = element_text(size = 14),
+        axis.text = element_text(size = 12)
+      ) +
+      labs(
+        title = "Trend of CPUE Over Time",
+        x = "Date",
+        y = "Log10 Density (quantity per km/CPUE)"
+      )+
+      stat_poly_eq(
+        aes(label = paste(..eq.label.., ..adj.rr.label.., sep = "~~~~")),
+        formula = y ~ x,  # Regression formula
+        parse = TRUE,
+        label.x.npc = "right",  # Position on the plot
+        label.y.npc = "top"  # Position on the plot
+      )
+  })
+  
+  
+  
+  ## Map----  
+  output$cam_map <- renderLeaflet({
+    
+    cam_sps <- filteredHumanData()
+    
+    CAM_sf <- st_as_sf(cam_sps, coords = c("X", "Y"), crs = 4326)
+    
+    CAM_sf <- CAM_sf %>% 
+      select(Patrol_ID, Station, Team, Tanggal, Kategori_temuan, Tindakan, Tipe.temuan)
+    
+    
+    m <- mapview(CAM_sf, zcol = "Kategori_temuan",
+                 layer.name = "Aktivitas Manusia",
+                 map.types = c("OpenStreetMap", "Esri.WorldImagery")) 
+    m@map
+  })
+  
+  # Human Activities Table
+  output$human_table <- DT::renderDT({
+    filteredHumanData() %>%
+      select(Patrol_ID, Station, Team, Tanggal, Kategori_temuan, Tindakan, Tipe.temuan)
+  })
+  
+  # Human Activities Table Download
+  output$download_human_data <- downloadHandler(
+    filename = function() {
+      paste("human_activities_", Sys.Date(), ".csv", sep = "")
+    },
+    content = function(file) {
+      write.csv(filteredHumanData(), file, row.names = FALSE)
+    }
+  )
+  
+  # Wildlife----
+  ##  Widllife Reactive Data Filtering----  
+  filteredwildlifeData <- eventReactive(input$wildlife_calculate, {
+    CSL_data <- CSL
+    
+    # Filter by Landscape
+    if (!is.null(input$landscape_wildlife) && length(input$landscape_wildlife) > 0) {
+      CSL_data <- CSL_data %>% filter(Landscape %in% input$landscape_wildlife)
+      updateSelectInput(session, "site_wildlife", choices = unique(CSL_data$Station))
+    }
+    
+    # Filter by Site
+    if (!is.null(input$site_wildlife) && length(input$site_wildlife) > 0) {
+      CSL_data <- CSL_data %>% filter(Station %in% input$site_wildlife)
+    }
+    
+    # Filter by Species
+    if (!is.null(input$Jenis.satwa) && length(input$Jenis.satwa) > 0) {
+      CSL_data <- CSL_data %>% filter(Jenis.satwa %in% input$Jenis.satwa)
+    }
+    
+    # Filter by Date Range
+    if (!is.null(input$dateRange_wildlife) && length(input$dateRange_wildlife) > 0) {
+      CSL_data <- CSL_data %>%
+        filter(as.Date(Patrol.Start.Date, format = "%b %d, %Y") >= input$dateRange_wildlife[1] &
+                 as.Date(Patrol.End.Date , format = "%b %d, %Y") <= input$dateRange_wildlife[2])
+    }
+    CSL_data
+  })
+  
+  ## Map----  
+  output$CSL_map <- renderLeaflet({
+    
+    csl_sps <- filteredwildlifeData()
+    
+    CSL_sf <- st_as_sf(csl_sps, coords = c("X", "Y"), crs = 4326)
+    
+    CSL_sf <- CSL_sf %>%
+      select(Patrol_ID, Station, Tanggal, Jenis.satwa ,Kategori_temuan, Tipe.temuan)
+    
+    m <- mapview(CSL_sf, zcol = "Jenis.satwa",
+                 layer.name = "Perjumpaan Satwa",
+                 map.types = c("OpenStreetMap", "Esri.WorldImagery")) 
+    m@map
+  })  
   
 }
 

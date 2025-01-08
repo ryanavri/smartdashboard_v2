@@ -106,6 +106,15 @@ DAVAIL <- CRP %>%
   ) %>%
   arrange(Landscape)
 
+# other argument
+datEff <- CRP %>%
+  group_by(Patrol_ID) %>%
+  summarise(effort = sum(Jarak)) %>%
+  inner_join(CRP %>% distinct(Patrol_ID, Patrol_Sta), by = "Patrol_ID")   %>%
+  as.data.frame() %>%
+  select(-geometry)
+
+
 # Export all ----
 # Save the cleaned datasets to an RData file
-save(CAM, CRP, CSL, DAVAIL, file = "source/smart_patrol_data.RData")
+save(CAM, CRP, CSL, DAVAIL, datEff, file = "source/smart_patrol_data.RData")
