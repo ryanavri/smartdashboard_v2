@@ -826,6 +826,16 @@ server <- function(input, output, session) {
     m@map
   })  
   
+  ## Wildlife Table Download----
+  output$download_wildlife_data <- downloadHandler(
+    filename = function() {
+      paste("wildlife_findings_", Sys.Date(), ".csv", sep = "")
+    },
+    content = function(file) {
+      write.csv(filteredwildlifeData(), file, row.names = FALSE)
+    }
+  )
+  
 }
 
 # Run the app----
