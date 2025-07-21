@@ -1,8 +1,8 @@
 #' Please do not rename this file !
 library(shiny.exe)
 hostWin(
-    appDir = 'D:/11_Coding_test/smartdashboard_v2',
-    port = getOption('shiny.port'),
+    appDir = 'D:/11_Coding_test/02_FFI_SMART_related/smartdashboard_v2',
+    port = 4576,
     launch.browser = TRUE,
     host = 'Public',
                   workerId = '',
